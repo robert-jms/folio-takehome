@@ -1,6 +1,8 @@
 <?php
 
-function render_header(string $title, ?array $staff = null): void {
+// Renders the HTML header, nav bar, and opening <main> tag.
+// $containerClass controls the CSS class on <main>, allowing different pages to use different layout widths.
+function render_header(string $title, ?array $staff = null, string $containerClass = 'container'): void {
     ?>
 <!doctype html>
 <html lang="en">
@@ -22,7 +24,7 @@ function render_header(string $title, ?array $staff = null): void {
         <?php endif ?>
     </div>
 </nav>
-<main class="container">
+<main class="<?= h($containerClass) ?>">
     <?php
 }
 

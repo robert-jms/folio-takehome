@@ -17,6 +17,7 @@ function validate_publish_at_input(?string $normalized): ?string {
         return null;
     }
     if ($normalized < date('Y-m-d H:i:s')) {
+        
         return 'Publish time must be in the future.';
     }
     return null;
@@ -26,37 +27,78 @@ $staff = current_staff();
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = trim($_POST['title'] ?? '');
-    $body = trim($_POST['body'] ?? '');
+    error_log('[admin.php POST] $_POST = ' . json_encode($_POST));
+    // doc_id is present when updating an existing document's publish time (inline row form),
+    // as opposed to the new-document form which has no doc_id.
+    if (isset($_POST['doc_id'])) {
+        $docId = (int) $_POST['doc_id'];
 
-    $publishAtRaw   = $_POST['publish_at'] ?? '';
-    $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
-    $publishAtError = validate_publish_at_input($publishAtNorm);
+        $stmt = db()->prepare('SELECT publish_at FROM documents WHERE id = ?');
+        $stmt->execute([$docId]);
+        $existingDoc = $stmt->fetch();
 
-    if ($title === '' || $body === '') {
-        $error = 'Title and body are required.';
-    }
+        if (!$existingDoc) {
+            $error = 'Document not found.';
+        } else {
+            $old = $existingDoc['publish_at'];
 
-    if ($publishAtError !== null) {
-        $error = $publishAtError;
-    }
+            $publishAtRaw   = $_POST['publish_at'] ?? '';
+            $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
+            $publishAtError = validate_publish_at_input($publishAtNorm);
 
-    if ($error === null) {
-        $stmt = db()->prepare('
-            INSERT INTO documents (title, body, created_by, publish_at)
-            VALUES (?, ?, ?, ?)
-        ');
-        $stmt->execute([$title, $body, $staff['id'], $publishAtNorm]);
-        $docId = (int) db()->lastInsertId();
+            if ($publishAtError !== null) {
+                $error = $publishAtError;
+            } else {
+                $new = $publishAtNorm;
 
-        $details = ['title' => $title];
-        if ($publishAtNorm !== null) {
-            $details['publish_at'] = $publishAtNorm;
+                db()->prepare('UPDATE documents SET publish_at = ? WHERE id = ?')
+                    ->execute([$new, $docId]);
+
+                audit_log('schedule_document', 'document', $docId, [
+                    'publish_at_old' => $old,
+                    'publish_at_new' => $new,
+                ]);
+
+                // Post/Redirect/Get pattern: 
+                // redirect after POST to prevent form re-submission on refresh.
+                // ?publish_updated=1 triggers the success banner on the next GET.
+                header('Location: /admin.php?publish_updated=1');
+                exit;
+            }
         }
-        audit_log('create', 'document', $docId, $details);
+    } else {
+        $title = trim($_POST['title'] ?? '');
+        $body = trim($_POST['body'] ?? '');
 
-        header('Location: /admin.php?created=' . $docId);
-        exit;
+        $publishAtRaw   = $_POST['publish_at'] ?? '';
+        $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
+        $publishAtError = validate_publish_at_input($publishAtNorm);
+
+        if ($title === '' || $body === '') {
+            $error = 'Title and body are required.';
+        }
+
+        if ($publishAtError !== null) {
+            $error = $publishAtError;
+        }
+
+        if ($error === null) {
+            $stmt = db()->prepare('
+                INSERT INTO documents (title, body, created_by, publish_at)
+                VALUES (?, ?, ?, ?)
+            ');
+            $stmt->execute([$title, $body, $staff['id'], $publishAtNorm]);
+            $docId = (int) db()->lastInsertId();
+
+            $details = ['title' => $title];
+            if ($publishAtNorm !== null) {
+                $details['publish_at'] = $publishAtNorm;
+            }
+            audit_log('create', 'document', $docId, $details);
+
+            header('Location: /admin.php?created=' . $docId);
+            exit;
+        }
     }
 }
 
@@ -67,7 +109,7 @@ $docs = db()->query('
     ORDER BY d.created_at DESC
 ')->fetchAll();
 
-render_header('Admin', $staff);
+render_header('Admin', $staff, 'container container-wide');
 ?>
 
 <h1 class="page-title">Admin</h1>
@@ -75,6 +117,10 @@ render_header('Admin', $staff);
 
 <?php if (!empty($_GET['created'])): ?>
     <div class="banner banner-success">Document #<?= (int) $_GET['created'] ?> created.</div>
+<?php endif ?>
+
+<?php if (!empty($_GET['publish_updated'])): ?>
+    <div class="banner banner-success">Publish time updated.</div>
 <?php endif ?>
 
 <?php if ($error): ?>
@@ -115,6 +161,8 @@ render_header('Admin', $staff);
                     <th>Creator</th>
                     <th>Created</th>
                     <th></th>
+                    <th>Publish at</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -125,6 +173,24 @@ render_header('Admin', $staff);
                         <td><?= h($d['creator_name']) ?></td>
                         <td><?= h($d['created_at']) ?></td>
                         <td><a href="/share.php?doc=<?= (int) $d['id'] ?>" class="btn-link">Create share →</a></td>
+                        <td>
+                            <?php if ($d['publish_at'] === null): ?>
+                            <?php elseif (date('Y-m-d H:i:s') < $d['publish_at']): ?>
+                                <?= h(format_publish_at($d['publish_at'])) ?> <span class="badge">Scheduled</span>
+                            <?php else: ?>
+                                <?= h(format_publish_at($d['publish_at'])) ?>
+                            <?php endif ?>
+                        </td>
+                        <td>
+                            <form method="post">
+                                <input type="hidden" name="doc_id" value="<?= h($d['id']) ?>">
+                                <input type="datetime-local" name="publish_at"
+                                       value="<?= h($d['publish_at'] !== null
+                                                       ? substr(str_replace(' ', 'T', $d['publish_at']), 0, 16)
+                                                       : '') ?>">
+                                <button type="submit">Save</button>
+                            </form>
+                        </td>
                     </tr>
                 <?php endforeach ?>
             </tbody>
