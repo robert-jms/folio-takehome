@@ -3,6 +3,25 @@
 require __DIR__ . '/../lib/bootstrap.php';
 require __DIR__ . '/../lib/layout.php';
 
+function parse_and_normalize_publish_at(string $raw): ?string {
+    $raw = trim($raw);
+    if ($raw === '') {
+        return null;
+    }
+    // Convert the datetime-local value into a SQL timestamp string.
+    return str_replace('T', ' ', $raw) . ':00';
+}
+
+function validate_publish_at_input(?string $normalized): ?string {
+    if ($normalized === null) {
+        return null;
+    }
+    if ($normalized < date('Y-m-d H:i:s')) {
+        return 'Publish time must be in the future.';
+    }
+    return null;
+}
+
 $staff = current_staff();
 $error = null;
 
@@ -10,17 +29,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['title'] ?? '');
     $body = trim($_POST['body'] ?? '');
 
+    $publishAtRaw   = $_POST['publish_at'] ?? '';
+    $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
+    $publishAtError = validate_publish_at_input($publishAtNorm);
+
     if ($title === '' || $body === '') {
         $error = 'Title and body are required.';
-    } else {
+    }
+
+    if ($publishAtError !== null) {
+        $error = $publishAtError;
+    }
+
+    if ($error === null) {
         $stmt = db()->prepare('
-            INSERT INTO documents (title, body, created_by)
-            VALUES (?, ?, ?)
+            INSERT INTO documents (title, body, created_by, publish_at)
+            VALUES (?, ?, ?, ?)
         ');
-        $stmt->execute([$title, $body, $staff['id']]);
+        $stmt->execute([$title, $body, $staff['id'], $publishAtNorm]);
         $docId = (int) db()->lastInsertId();
 
-        audit_log('create', 'document', $docId, ['title' => $title]);
+        $details = ['title' => $title];
+        if ($publishAtNorm !== null) {
+            $details['publish_at'] = $publishAtNorm;
+        }
+        audit_log('create', 'document', $docId, $details);
 
         header('Location: /admin.php?created=' . $docId);
         exit;
@@ -58,6 +91,12 @@ render_header('Admin', $staff);
         <div class="form-field">
             <label for="body">Body</label>
             <textarea id="body" name="body" required></textarea>
+        </div>
+        <div class="form-field">
+            <label for="publish_at">Publish at (optional)</label>
+            <!-- Keep the submitted publish time in the field after validation errors. -->
+            <input type="datetime-local" id="publish_at" name="publish_at"
+                   value="<?= h(isset($_POST['publish_at']) ? $_POST['publish_at'] : '') ?>">
         </div>
         <button type="submit" class="btn">Create document</button>
     </form>
