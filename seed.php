@@ -10,6 +10,16 @@ if (file_exists($dbPath)) {
 $pdo = db();
 $pdo->exec(file_get_contents(__DIR__ . '/schema.sql'));
 
+// Apply migrations in filename order so the seeded database includes the publish_at column.
+$migrationDir = __DIR__ . '/db/migrations';
+if (is_dir($migrationDir)) {
+    $migrationFiles = glob($migrationDir . '/*.sql');
+    sort($migrationFiles);
+    foreach ($migrationFiles as $migFile) {
+        $pdo->exec(file_get_contents($migFile));
+    }
+}
+
 $pdo->exec("
     INSERT INTO staff (email, name) VALUES
         ('freddy@folio.example', 'Freddy Folio')

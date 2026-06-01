@@ -27,6 +27,14 @@ if (!$doc) {
     exit;
 }
 
+if ($doc['publish_at'] !== null && date('Y-m-d H:i:s') < $doc['publish_at']) {
+    render_header('This document is not yet available.');
+    echo '<h1>' . h('This document is not yet available.') . '</h1>';
+    echo '<p>Available on ' . h(format_publish_at($doc['publish_at'])) . '</p>';
+    render_footer();
+    exit;
+}
+
 render_header($doc['title']);
 ?>
 
