@@ -28,6 +28,8 @@ $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     error_log('[admin.php POST] $_POST = ' . json_encode($_POST));
+    // Browser supplies its UTC offset (minutes west) so we can convert local time to UTC.
+    $tzOffset = (int) ($_POST['tz_offset'] ?? 0);
     // doc_id is present when updating an existing document's publish time (inline row form),
     // as opposed to the new-document form which has no doc_id.
     if (isset($_POST['doc_id'])) {
@@ -44,6 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $publishAtRaw   = $_POST['publish_at'] ?? '';
             $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
+            // Shift local time to UTC using the browser-supplied offset.
+            if ($publishAtNorm !== null && $tzOffset !== 0) {
+                $dt = new DateTime($publishAtNorm);
+                $dt->modify("+{$tzOffset} minutes");
+                $publishAtNorm = $dt->format('Y-m-d H:i:s');
+            }
             $publishAtError = validate_publish_at_input($publishAtNorm);
 
             if ($publishAtError !== null) {
@@ -72,6 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $publishAtRaw   = $_POST['publish_at'] ?? '';
         $publishAtNorm  = parse_and_normalize_publish_at($publishAtRaw);
+        // Shift local time to UTC using the browser-supplied offset.
+        if ($publishAtNorm !== null && $tzOffset !== 0) {
+            $dt = new DateTime($publishAtNorm);
+            $dt->modify("+{$tzOffset} minutes");
+            $publishAtNorm = $dt->format('Y-m-d H:i:s');
+        }
         $publishAtError = validate_publish_at_input($publishAtNorm);
 
         if ($title === '' || $body === '') {
@@ -144,6 +158,7 @@ render_header('Admin', $staff, 'container container-wide');
             <input type="datetime-local" id="publish_at" name="publish_at"
                    value="<?= h(isset($_POST['publish_at']) ? $_POST['publish_at'] : '') ?>">
         </div>
+        <input type="hidden" name="tz_offset" value="0">
         <button type="submit" class="btn">Create document</button>
     </form>
 </section>
@@ -159,10 +174,10 @@ render_header('Admin', $staff, 'container container-wide');
                     <th>ID</th>
                     <th>Title</th>
                     <th>Creator</th>
-                    <th>Created</th>
+                    <th data-utc-header>Created</th>
                     <th></th>
-                    <th>Publish at</th>
-                    <th></th>
+                    <th data-utc-header>Publish at</th>
+                    <th>Schedule Release at</th>
                 </tr>
             </thead>
             <tbody>
@@ -171,21 +186,25 @@ render_header('Admin', $staff, 'container container-wide');
                         <td class="id">#<?= (int) $d['id'] ?></td>
                         <td><?= h($d['title']) ?></td>
                         <td><?= h($d['creator_name']) ?></td>
-                        <td><?= h($d['created_at']) ?></td>
+                        <td><span data-utc="<?= h($d['created_at']) ?>"><?= h($d['created_at']) ?></span></td>
                         <td><a href="/share.php?doc=<?= (int) $d['id'] ?>" class="btn-link">Create share →</a></td>
                         <td>
                             <?php if ($d['publish_at'] === null): ?>
                             <?php elseif (date('Y-m-d H:i:s') < $d['publish_at']): ?>
-                                <?= h(format_publish_at($d['publish_at'])) ?> <span class="badge">Scheduled</span>
+                                <span data-utc="<?= h($d['publish_at']) ?>"><?= h(format_publish_at($d['publish_at'])) ?></span> <span class="badge">Scheduled</span>
                             <?php else: ?>
-                                <?= h(format_publish_at($d['publish_at'])) ?>
+                                <span data-utc="<?= h($d['publish_at']) ?>"><?= h(format_publish_at($d['publish_at'])) ?></span>
                             <?php endif ?>
                         </td>
                         <td>
                             <form method="post">
                                 <input type="hidden" name="doc_id" value="<?= h($d['id']) ?>">
+                                <input type="hidden" name="tz_offset" value="0">
                                 <input type="datetime-local" name="publish_at"
+                                       data-utc-val="<?= h($d['publish_at'] ?? '') ?>"
                                        value="<?= h($d['publish_at'] !== null
+                                                       // substr(..., 0, 16) drops the trailing ':00' seconds,
+                                                       // since datetime-local requires YYYY-MM-DDTHH:MM only.
                                                        ? substr(str_replace(' ', 'T', $d['publish_at']), 0, 16)
                                                        : '') ?>">
                                 <button type="submit">Save</button>
@@ -198,4 +217,50 @@ render_header('Admin', $staff, 'container container-wide');
     <?php endif ?>
 </section>
 
+<script>
+// Populate all tz_offset fields with the browser's UTC offset (minutes west of UTC).
+document.querySelectorAll('input[name="tz_offset"]').forEach(function(el) {
+    el.value = new Date().getTimezoneOffset();
+});
+
+// Compute the UTC offset label once (e.g. "UTC-5") from the browser's current timezone.
+(function() {
+    var offsetTotalMin = -new Date().getTimezoneOffset();
+    var sign = offsetTotalMin >= 0 ? '+' : '-';
+    var absTotal = Math.abs(offsetTotalMin);
+    var hh = Math.floor(absTotal / 60);
+    var mm = absTotal % 60;
+    var utcLabel = 'UTC' + sign + hh + (mm ? ':' + String(mm).padStart(2, '0') : '');
+
+    // Append "(local time [UTC-X])" to column headers.
+    document.querySelectorAll('[data-utc-header]').forEach(function(el) {
+        el.textContent += ' (local time [' + utcLabel + '])';
+    });
+
+    // Format helper: outputs "YYYY-MM-DD HH:MM:SS" in local time.
+    function fmtLocal(utcStr) {
+        var d = new Date(utcStr.replace(' ', 'T') + 'Z');
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    // Convert all [data-utc] display spans from UTC to local time.
+    document.querySelectorAll('[data-utc]').forEach(function(el) {
+        el.textContent = fmtLocal(el.dataset.utc);
+    });
+
+    // Convert datetime-local inputs: set value to local YYYY-MM-DDTHH:MM.
+    document.querySelectorAll('input[type="datetime-local"][data-utc-val]').forEach(function(el) {
+        var raw = el.dataset.utcVal;
+        if (!raw) return;
+        var d = new Date(raw.replace(' ', 'T') + 'Z');
+        // pad ensures single-digit months/days/hours/minutes get a leading zero
+        // so the value matches the required YYYY-MM-DDTHH:MM format (e.g. "06" not "6").
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        el.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+                 + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    });
+})();
+</script>
 <?php render_footer(); ?>
