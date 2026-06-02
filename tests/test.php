@@ -125,5 +125,27 @@ test('audit log includes human_id on document create', function () {
     assert_true($details['human_id'] === $humanId, 'expected human_id value to match; got: ' . var_export($details['human_id'], true));
 });
 
+test('human_id route resolves document', function () {
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id) VALUES (?, ?, ?, ?)');
+    $stmt->execute(['HID Test Doc', 'body', 1, 'design-test-aaaaa']);
+    $stmt2 = db()->prepare('SELECT * FROM documents WHERE human_id = ?');
+    $stmt2->execute(['design-test-aaaaa']);
+    $row = $stmt2->fetch();
+    assert_true($row !== false, 'expected row to be found by human_id');
+    assert_true($row['title'] === 'HID Test Doc', 'unexpected title: ' . var_export($row['title'], true));
+});
+
+test('human_id route respects publish_at gate', function () {
+    $future = date('Y-m-d H:i:s', strtotime('+1 hour'));
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id, publish_at) VALUES (?, ?, ?, ?, ?)');
+    $stmt->execute(['HID Gate Doc', 'body', 1, 'design-test-bbbbb', $future]);
+    $stmt2 = db()->prepare('SELECT * FROM documents WHERE human_id = ?');
+    $stmt2->execute(['design-test-bbbbb']);
+    $doc = $stmt2->fetch();
+    assert_true($doc !== false, 'expected row to be found by human_id');
+    $gateBlocks = ($doc['publish_at'] !== null && date('Y-m-d H:i:s') < $doc['publish_at']);
+    assert_true($gateBlocks, 'Gate should block when publish_at is 1 hour in the future');
+});
+
 echo "\n{$pass} passed, {$fail} failed.\n";
 exit($fail > 0 ? 1 : 0);

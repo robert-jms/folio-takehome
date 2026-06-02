@@ -59,6 +59,9 @@ render_header('Share · ' . $doc['title'], $staff);
     <div class="banner banner-success">
         Share link ready:
         <code>http://<?= h($_SERVER['HTTP_HOST']) ?>/view.php?token=<?= h($created_token) ?></code>
+        <br>
+        Share link ready:
+        <code>http://<?= h($_SERVER['HTTP_HOST']) ?>/view.php?hid=<?= h($doc['human_id']) ?></code>
     </div>
 <?php endif ?>
 
