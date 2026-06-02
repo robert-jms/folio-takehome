@@ -3,6 +3,14 @@
 require __DIR__ . '/../lib/bootstrap.php';
 require __DIR__ . '/../lib/layout.php';
 
+/**
+ * The publish_at column stores an optional UTC timestamp (YYYY-MM-DD HH:MM:SS)
+ * indicating when a document should become visible to readers. When null the
+ * document is available immediately. The admin UI collects local datetimes
+ * (datetime-local) and sends the browser's tz_offset so the server converts
+ * the supplied local time into UTC before saving. Validation ensures scheduled
+ * publish times are in the future.
+ */
 function parse_and_normalize_publish_at(string $raw): ?string {
     $raw = trim($raw);
     if ($raw === '') {
@@ -158,6 +166,8 @@ render_header('Admin', $staff, 'container container-wide');
             <input type="datetime-local" id="publish_at" name="publish_at"
                    value="<?= h(isset($_POST['publish_at']) ? $_POST['publish_at'] : '') ?>">
         </div>
+        <!-- Browser tz offset (minutes). Date.getTimezoneOffset() returns the minutes to add to local time to get UTC.
+             The server adds this value to the submitted local datetime to store a UTC timestamp. -->
         <input type="hidden" name="tz_offset" value="0">
         <button type="submit" class="btn">Create document</button>
     </form>
@@ -199,6 +209,8 @@ render_header('Admin', $staff, 'container container-wide');
                         <td>
                             <form method="post">
                                 <input type="hidden" name="doc_id" value="<?= h($d['id']) ?>">
+                                <!-- Browser tz offset (minutes). Date.getTimezoneOffset() returns the minutes to add to local time to get UTC.
+                                     The server adds this value to the submitted local datetime to store a UTC timestamp. -->
                                 <input type="hidden" name="tz_offset" value="0">
                                 <input type="datetime-local" name="publish_at"
                                        data-utc-val="<?= h($d['publish_at'] ?? '') ?>"
@@ -218,7 +230,7 @@ render_header('Admin', $staff, 'container container-wide');
 </section>
 
 <script>
-// Populate all tz_offset fields with the browser's UTC offset (minutes west of UTC).
+// Populate all tz_offset (hidden) fields with the browser's UTC offset (minutes west of UTC).
 document.querySelectorAll('input[name="tz_offset"]').forEach(function(el) {
     el.value = new Date().getTimezoneOffset();
 });
