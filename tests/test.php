@@ -147,29 +147,41 @@ test('human_id route respects publish_at gate', function () {
     assert_true($gateBlocks, 'Gate should block when publish_at is 1 hour in the future');
 });
 
-// --- Feature 3: share-by-name search ---
+// --- Feature 3: title search ---
+// The filter runs entirely in the browser (JS), so we fetch the rendered admin page
+// and assert the DOM structure the JS depends on is actually present.
+// NOTE: these tests verify the DOM contract (input ID, column position) but cannot
+// test the filtering behaviour itself (hiding/showing rows on keystroke) — that would
+// require a headless browser (e.g. Playwright). Not added here to avoid pulling in a
+// JS runtime dependency for a PHP-only project.
 
-test('search finds document by exact title', function () {
-    $humanId = generate_human_id('Search Exact Test');
-    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id) VALUES (?, ?, ?, ?)');
-    $stmt->execute(['Search Exact Test', 'body', 1, $humanId]);
-
-    $stmt2 = db()->prepare('SELECT * FROM documents WHERE title = ?');
-    $stmt2->execute(['Search Exact Test']);
-    $row = $stmt2->fetch();
-    assert_true($row !== false, 'document with exact title should exist');
+test('admin page renders #doc-search input for frontend title filter', function () {
+    $html = file_get_contents('http://localhost:8000/admin.php');
+    assert_true($html !== false, 'failed to fetch admin.php');
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    $input = $xpath->query('//*[@id="doc-search"]');
+    assert_true($input->length === 1, 'expected #doc-search input to be present');
 });
 
-test('search finds document by partial title substring', function () {
-    $humanId = generate_human_id('Substring Match Packet');
-    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id) VALUES (?, ?, ?, ?)');
-    $stmt->execute(['Substring Match Packet', 'body', 1, $humanId]);
-
-    $stmt2 = db()->prepare("SELECT * FROM documents WHERE LOWER(title) LIKE LOWER(?)");
-    $stmt2->execute(['%Match Packet%']);
-    $rows = $stmt2->fetchAll();
-    $titles = array_column($rows, 'title');
-    assert_true(in_array('Substring Match Packet', $titles), 'substring filter should match');
+test('admin page renders document titles in the second table cell (JS filter target)', function () {
+    $html = file_get_contents('http://localhost:8000/admin.php');
+    assert_true($html !== false, 'failed to fetch admin.php');
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    // JS targets td:nth-child(2) in table.data tbody rows for the title.
+    $cells = $xpath->query('//table[contains(@class,"data")]//tbody/tr/td[2]');
+    assert_true($cells->length > 0, 'expected at least one title cell in the documents table');
+    $found = false;
+    foreach ($cells as $cell) {
+        if (trim($cell->textContent) === 'Welcome Packet') {
+            $found = true;
+            break;
+        }
+    }
+    assert_true($found, 'expected seeded document title in td:nth-child(2)');
 });
 
 echo "\n{$pass} passed, {$fail} failed.\n";
