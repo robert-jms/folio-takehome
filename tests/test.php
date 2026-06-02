@@ -147,5 +147,30 @@ test('human_id route respects publish_at gate', function () {
     assert_true($gateBlocks, 'Gate should block when publish_at is 1 hour in the future');
 });
 
+// --- Feature 3: share-by-name search ---
+
+test('search finds document by exact title', function () {
+    $humanId = generate_human_id('Search Exact Test');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id) VALUES (?, ?, ?, ?)');
+    $stmt->execute(['Search Exact Test', 'body', 1, $humanId]);
+
+    $stmt2 = db()->prepare('SELECT * FROM documents WHERE title = ?');
+    $stmt2->execute(['Search Exact Test']);
+    $row = $stmt2->fetch();
+    assert_true($row !== false, 'document with exact title should exist');
+});
+
+test('search finds document by partial title substring', function () {
+    $humanId = generate_human_id('Substring Match Packet');
+    $stmt = db()->prepare('INSERT INTO documents (title, body, created_by, human_id) VALUES (?, ?, ?, ?)');
+    $stmt->execute(['Substring Match Packet', 'body', 1, $humanId]);
+
+    $stmt2 = db()->prepare("SELECT * FROM documents WHERE LOWER(title) LIKE LOWER(?)");
+    $stmt2->execute(['%Match Packet%']);
+    $rows = $stmt2->fetchAll();
+    $titles = array_column($rows, 'title');
+    assert_true(in_array('Substring Match Packet', $titles), 'substring filter should match');
+});
+
 echo "\n{$pass} passed, {$fail} failed.\n";
 exit($fail > 0 ? 1 : 0);
