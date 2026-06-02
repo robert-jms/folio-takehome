@@ -104,14 +104,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($error === null) {
+            try {
+                $humanId = generate_human_id($title);
+            } catch (RuntimeException $e) {
+                $error = $e->getMessage();
+            }
+        }
+
+        if ($error === null) {
             $stmt = db()->prepare('
-                INSERT INTO documents (title, body, created_by, publish_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO documents (title, body, created_by, publish_at, human_id)
+                VALUES (?, ?, ?, ?, ?)
             ');
-            $stmt->execute([$title, $body, $staff['id'], $publishAtNorm]);
+            $stmt->execute([$title, $body, $staff['id'], $publishAtNorm, $humanId]);
             $docId = (int) db()->lastInsertId();
 
-            $details = ['title' => $title];
+            // create key/value audit log details for the created document.
+            $details = ['title' => $title, 'human_id' => $humanId];
             if ($publishAtNorm !== null) {
                 $details['publish_at'] = $publishAtNorm;
             }
@@ -182,6 +191,7 @@ render_header('Admin', $staff, 'container container-wide');
                 <tr>
                     <th>ID</th>
                     <th>Title</th>
+                    <th>Human ID</th>
                     <th>Creator</th>
                     <th data-utc-header>Created</th>
                     <th></th>
@@ -194,6 +204,13 @@ render_header('Admin', $staff, 'container container-wide');
                     <tr>
                         <td class="id">#<?= (int) $d['id'] ?></td>
                         <td><?= h($d['title']) ?></td>
+                        <td>
+                            <span><?= h($d['human_id']) ?></span>
+                            <button type="button" class="btn-copy"
+                                    data-copy-url="http://<?= h($_SERVER['HTTP_HOST']) ?>/view.php?hid=<?= h($d['human_id']) ?>">
+                                Copy link
+                            </button>
+                        </td>
                         <td><?= h($d['creator_name']) ?></td>
                         <td><span data-utc="<?= h($d['created_at']) ?>"><?= h($d['created_at']) ?></span></td>
                         <td><a href="/share.php?doc=<?= (int) $d['id'] ?>" class="btn-link">Create share →</a></td>
@@ -273,5 +290,11 @@ document.querySelectorAll('input[name="tz_offset"]').forEach(function(el) {
                  + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     });
 })();
+
+document.querySelectorAll('.btn-copy').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        navigator.clipboard.writeText(btn.dataset.copyUrl);
+    });
+});
 </script>
 <?php render_footer(); ?>
