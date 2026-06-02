@@ -48,5 +48,6 @@ function h(string $s): string {
 }
 
 function format_publish_at(string $val): string {
+    // Render publish timestamps as a human-friendly month/day/year time.
     return date('M j, Y g:i A', strtotime($val));
 }

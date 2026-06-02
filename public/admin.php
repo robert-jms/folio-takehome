@@ -35,7 +35,6 @@ $staff = current_staff();
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    error_log('[admin.php POST] $_POST = ' . json_encode($_POST));
     // Browser supplies its UTC offset (minutes west) so we can convert local time to UTC.
     $tzOffset = (int) ($_POST['tz_offset'] ?? 0);
     // doc_id is present when updating an existing document's publish time (inline row form),
