@@ -46,3 +46,7 @@ function random_token(int $bytes = 16): string {
 function h(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
 }
+
+function format_publish_at(string $val): string {
+    return date('M j, Y g:i A', strtotime($val));
+}

@@ -99,6 +99,10 @@ a:hover { color: var(--accent-hover); }
     max-width: 520px;
 }
 
+.container-wide {
+    max-width: 78rem;
+}
+
 .page-title {
     font-size: 1.5rem;
     font-weight: 600;
@@ -119,6 +123,7 @@ a:hover { color: var(--accent-hover); }
     padding: 1.25rem 1.5rem 1.5rem;
     margin-bottom: 1.25rem;
     box-shadow: var(--shadow-sm);
+    overflow-x: auto;
 }
 
 .card-title {
@@ -267,12 +272,14 @@ table.data th {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
 
 table.data td {
     padding: 0.7rem 0.75rem;
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
+    white-space: nowrap;
 }
 
 table.data tr:last-child td {
