@@ -147,5 +147,42 @@ test('human_id route respects publish_at gate', function () {
     assert_true($gateBlocks, 'Gate should block when publish_at is 1 hour in the future');
 });
 
+// --- Feature 3: title search ---
+// The filter runs entirely in the browser (JS), so we fetch the rendered admin page
+// and assert the DOM structure the JS depends on is actually present.
+// NOTE: these tests verify the DOM contract (input ID, column position) but cannot
+// test the filtering behaviour itself (hiding/showing rows on keystroke) — that would
+// require a headless browser (e.g. Playwright). Not added here to avoid pulling in a
+// JS runtime dependency for a PHP-only project.
+
+test('admin page renders #doc-search input for frontend title filter', function () {
+    $html = file_get_contents('http://localhost:8000/admin.php');
+    assert_true($html !== false, 'failed to fetch admin.php');
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    $input = $xpath->query('//*[@id="doc-search"]');
+    assert_true($input->length === 1, 'expected #doc-search input to be present');
+});
+
+test('admin page renders document titles in the second table cell (JS filter target)', function () {
+    $html = file_get_contents('http://localhost:8000/admin.php');
+    assert_true($html !== false, 'failed to fetch admin.php');
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    // JS targets td:nth-child(2) in table.data tbody rows for the title.
+    $cells = $xpath->query('//table[contains(@class,"data")]//tbody/tr/td[2]');
+    assert_true($cells->length > 0, 'expected at least one title cell in the documents table');
+    $found = false;
+    foreach ($cells as $cell) {
+        if (trim($cell->textContent) === 'Welcome Packet') {
+            $found = true;
+            break;
+        }
+    }
+    assert_true($found, 'expected seeded document title in td:nth-child(2)');
+});
+
 echo "\n{$pass} passed, {$fail} failed.\n";
 exit($fail > 0 ? 1 : 0);

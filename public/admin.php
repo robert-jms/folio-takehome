@@ -183,6 +183,7 @@ render_header('Admin', $staff, 'container container-wide');
 
 <section class="card">
     <h2 class="card-title">Documents</h2>
+    <input type="search" id="doc-search" placeholder="Filter by title…" style="margin-bottom:1rem">
     <?php if (empty($docs)): ?>
         <p class="empty">No documents yet.</p>
     <?php else: ?>
@@ -296,5 +297,19 @@ document.querySelectorAll('.btn-copy').forEach(function(btn) {
         navigator.clipboard.writeText(btn.dataset.copyUrl);
     });
 });
+
+// Frontend title search: filters the already-rendered document rows in place
+// without a server round-trip (all documents are loaded on page load).
+(function() {
+    var input = document.getElementById('doc-search');
+    if (!input) return;
+    input.addEventListener('input', function() {
+        var q = input.value.toLowerCase();
+        document.querySelectorAll('table.data tbody tr').forEach(function(row) {
+            var title = row.querySelector('td:nth-child(2)');
+            row.style.display = (!title || title.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+        });
+    });
+})();
 </script>
 <?php render_footer(); ?>
