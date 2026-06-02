@@ -24,7 +24,7 @@ function validate_publish_at_input(?string $normalized): ?string {
     if ($normalized === null) {
         return null;
     }
-    if ($normalized < date('Y-m-d H:i:s')) {
+    if ($normalized < gmdate('Y-m-d H:i:s')) {
         
         return 'Publish time must be in the future.';
     }
@@ -217,7 +217,7 @@ render_header('Admin', $staff, 'container container-wide');
                         <td><a href="/share.php?doc=<?= (int) $d['id'] ?>" class="btn-link">Create share →</a></td>
                         <td>
                             <?php if ($d['publish_at'] === null): ?>
-                            <?php elseif (date('Y-m-d H:i:s') < $d['publish_at']): ?>
+                            <?php elseif (gmdate('Y-m-d H:i:s') < $d['publish_at']): ?>
                                 <span data-utc="<?= h($d['publish_at']) ?>"><?= h(format_publish_at($d['publish_at'])) ?></span> <span class="badge">Scheduled</span>
                             <?php else: ?>
                                 <span data-utc="<?= h($d['publish_at']) ?>"><?= h(format_publish_at($d['publish_at'])) ?></span>

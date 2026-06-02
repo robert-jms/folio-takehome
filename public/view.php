@@ -25,7 +25,7 @@ if ($hid !== '') {
         exit;
     }
 
-    if ($doc['publish_at'] !== null && date('Y-m-d H:i:s') < $doc['publish_at']) {
+    if ($doc['publish_at'] !== null && gmdate('Y-m-d H:i:s') < $doc['publish_at']) {
         render_not_yet_available($doc);
         exit;
     }
@@ -62,7 +62,7 @@ if ($hid !== '') {
         exit;
     }
 
-    if ($doc['publish_at'] !== null && date('Y-m-d H:i:s') < $doc['publish_at']) {
+    if ($doc['publish_at'] !== null && gmdate('Y-m-d H:i:s') < $doc['publish_at']) {
         render_not_yet_available($doc);
         exit;
     }
